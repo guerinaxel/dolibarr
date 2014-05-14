@@ -246,6 +246,18 @@ $server->register(
     'WS to create an invoice'
 );
 
+$server->register(
+    'generateInvoicePDF',
+    // Entry values
+    array('authentication'=>'tns:authentication','id'=>'xsd:string'),
+    // Exit values
+    array('result'=>'tns:result','linkPDF'=>'xsd:string'),
+    $ns,
+    $ns.'#generateInvoicePDF',
+    $styledoc,
+    $styleuse,
+    'WS to get all invoices of a third party'
+);
 
 /**
  * Get invoice from id, ref or ref_ext.
@@ -583,6 +595,81 @@ function createInvoice($authentication,$invoice)
     return $objectresp;
 }
 
+$server->register(
+    'generateInvoicePDF',
+    // Entry values
+    array('authentication'=>'tns:authentication','id'=>'xsd:string'),
+    // Exit values
+    array('result'=>'tns:result','linkPDF'=>'xsd:string'),
+    $ns,
+    $ns.'#generateInvoicePDF',
+    $styledoc,
+    $styleuse,
+    'WS to get all invoices of a third party'
+);
+
+/**
+ * Generate the PDF file of an invoice
+ *
+ * @param	array		$authentication		Array of authentication information
+ * @param	Facture		$id					id of the invoice
+ * @return	string							link to the PDF file
+ */
+function generateInvoicePDF($authentication,$id)
+{
+    global $db,$conf,$langs;
+
+    $now=dol_now();
+
+    dol_syslog("Function: generateInvoicePDF login=".$authentication['login']);
+
+    if ($authentication['entity']) $conf->entity=$authentication['entity'];
+
+    // Init and check authentication
+    $objectresp=array();
+    $errorcode='';$errorlabel='';
+    $error=0;
+    $fuser=check_authentication($authentication,$error,$errorcode,$errorlabel);
+
+    if (! $error)
+    {
+		$object=new Facture($db);
+        $object->fetch($id);
+		$object->fetch_thirdparty();
+
+		// Define output language
+		$outputlangs = $langs;
+		$newlang='fr_FR';
+		
+		if ($conf->global->MAIN_MULTILANGS && empty($newlang) && GETPOST('lang_id')) $newlang=GETPOST('lang_id');
+		if ($conf->global->MAIN_MULTILANGS && empty($newlang)) $newlang=$object->client->default_lang;
+		
+		if (! empty($newlang))
+		{
+			$outputlangs = new Translate("",$conf);
+			$outputlangs->setDefaultLang($newlang);
+		}
+		$hidedetails = 0;
+		$hidedesc = 0;
+		$hideref = 0;
+		$result=facture_pdf_create($db, $object, $object->modelpdf, $outputlangs, $hidedetails, $hidedesc, $hideref);
+		if ($result <= 0)
+		{
+			dol_print_error($db,$result);
+		}
+		if (! $error)
+        {
+            $db->commit();
+            $objectresp=array('result'=>array('result_code'=>'OK', 'result_label'=>''),'linkPDF'=>'/facture/'.$object->ref.'/'.$object->ref.'.pdf');
+        }
+    }
+
+    if ($error)
+    {
+        $objectresp = array('result'=>array('result_code' => $errorcode, 'result_label' => $errorlabel));
+    }
+    return $objectresp;
+}
 
 // Return the results.
 $server->service((isset($HTTP_RAW_POST_DATA)?$HTTP_RAW_POST_DATA:''));
